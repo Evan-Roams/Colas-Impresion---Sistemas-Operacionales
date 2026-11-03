@@ -1,0 +1,40 @@
+[23:15:02] SERVIDOR: cola inicializada; capacidad=5, trabajos previstos=12
+[23:15:04] CLIENTE C1: encoló trabajo ID=1 (Trabajo de C1 #1)
+[23:15:04] IMPRESORA P1: inicia trabajo ID=1 (Trabajo de C1 #1)
+[23:15:04] CLIENTE C1: encoló trabajo ID=3 (Trabajo de C1 #2)
+[23:15:04] CLIENTE C3: encoló trabajo ID=2 (Trabajo de C3 #1)
+[23:15:04] CLIENTE C1: encoló trabajo ID=5 (Trabajo de C1 #3)
+[23:15:04] IMPRESORA P1: terminó trabajo ID=1
+[23:15:04] IMPRESORA P1: inicia trabajo ID=3 (Trabajo de C1 #2)
+[23:15:04] CLIENTE C3: encoló trabajo ID=6 (Trabajo de C3 #2)
+[23:15:04] CLIENTE C2: encoló trabajo ID=4 (Trabajo de C2 #1)
+[23:15:04] CLIENTE C1: encoló trabajo ID=7 (Trabajo de C1 #4)
+[23:15:04] IMPRESORA P2: inicia trabajo ID=2 (Trabajo de C3 #1)
+[23:15:04] CLIENTE C3: encoló trabajo ID=8 (Trabajo de C3 #3)
+[23:15:04] IMPRESORA P1: terminó trabajo ID=3
+[23:15:04] IMPRESORA P1: inicia trabajo ID=4 (Trabajo de C2 #1)
+[23:15:04] CLIENTE C2: encoló trabajo ID=9 (Trabajo de C2 #2)
+[23:15:04] IMPRESORA P2: terminó trabajo ID=2
+[23:15:04] IMPRESORA P2: inicia trabajo ID=5 (Trabajo de C1 #3)
+[23:15:04] CLIENTE C3: encoló trabajo ID=10 (Trabajo de C3 #4)
+[23:15:04] IMPRESORA P1: terminó trabajo ID=4
+[23:15:04] IMPRESORA P1: inicia trabajo ID=6 (Trabajo de C3 #2)
+[23:15:04] CLIENTE C2: encoló trabajo ID=11 (Trabajo de C2 #3)
+[23:15:04] IMPRESORA P2: terminó trabajo ID=5
+[23:15:04] IMPRESORA P2: inicia trabajo ID=7 (Trabajo de C1 #4)
+[23:15:04] CLIENTE C2: encoló trabajo ID=12 (Trabajo de C2 #4)
+[23:15:04] IMPRESORA P1: terminó trabajo ID=6
+[23:15:04] IMPRESORA P1: inicia trabajo ID=8 (Trabajo de C3 #3)
+[23:15:04] IMPRESORA P2: terminó trabajo ID=7
+[23:15:04] IMPRESORA P2: inicia trabajo ID=9 (Trabajo de C2 #2)
+[23:15:04] IMPRESORA P1: terminó trabajo ID=8
+[23:15:04] IMPRESORA P1: inicia trabajo ID=10 (Trabajo de C3 #4)
+[23:15:04] IMPRESORA P2: terminó trabajo ID=9
+[23:15:04] IMPRESORA P2: inicia trabajo ID=11 (Trabajo de C2 #3)
+[23:15:05] IMPRESORA P1: terminó trabajo ID=10
+[23:15:05] IMPRESORA P1: inicia trabajo ID=12 (Trabajo de C2 #4)
+[23:15:05] IMPRESORA P2: terminó trabajo ID=11
+[23:15:05] IMPRESORA P1: terminó trabajo ID=12
+[23:15:05] IMPRESORA P1: finalizó; no quedan trabajos pendientes
+[23:15:05] IMPRESORA P2: finalizó; no quedan trabajos pendientes
+[23:15:05] SERVIDOR: procesos finalizados. Total esperado=12

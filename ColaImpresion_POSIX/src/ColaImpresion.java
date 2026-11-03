@@ -10,6 +10,7 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
@@ -20,6 +21,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Cola de impresión compartida entre procesos independientes de Java en Linux.
@@ -37,6 +39,7 @@ public class ColaImpresion {
         int sem_close(Pointer sem);
         int sem_unlink(String name);
         int __errno_location();
+        int getuid();
     }
 
     private static final int O_CREAT = 64; // Linux
@@ -65,13 +68,45 @@ public class ColaImpresion {
 
     private static void securePermissions(Path path) throws IOException {
         Files.setPosixFilePermissions(path, OWNER_RW);
+        verifySecureFile(path, "archivo");
+    }
+
+    /**
+     * Segundo control de seguridad: rechaza enlaces simbólicos, archivos no
+     * regulares y cualquier permiso distinto de 0600 (solo propietario RW).
+     */
+    static void verifySecureFile(Path path, String label) throws IOException {
+        if (Files.isSymbolicLink(path)
+                || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("SEGURIDAD: " + label
+                    + " no es un archivo regular o es un enlace simbólico: " + path);
+        }
+        Set<PosixFilePermission> actual =
+                Files.getPosixFilePermissions(path, LinkOption.NOFOLLOW_LINKS);
+        if (!actual.equals(OWNER_RW)) {
+            throw new IOException("SEGURIDAD: permisos inseguros en " + label
+                    + ". Se requiere 600 (-rw-------), pero se encontró "
+                    + PosixFilePermissions.toString(actual) + " (" + path + ").");
+        }
+    }
+
+    /** Rechaza la ejecución con UID 0 (root); el proyecto debe correr como usuario normal. */
+    static void ensureNotRoot() {
+        if (LibC.INSTANCE.getuid() == 0) {
+            throw new SecurityException(
+                    "SEGURIDAD: ejecución como root no permitida. Ejecute el proyecto con un usuario normal de Kali.");
+        }
     }
 
     private static void log(String message) throws IOException {
         String line = "[" + LocalTime.now().format(TIME) + "] " + message + System.lineSeparator();
+        if (Files.exists(LOG, LinkOption.NOFOLLOW_LINKS)) {
+            verifySecureFile(LOG, "bitácora");
+        }
         try (FileChannel ch = FileChannel.open(LOG, StandardOpenOption.CREATE,
                 StandardOpenOption.WRITE, StandardOpenOption.APPEND)) {
             securePermissions(LOG);
+            verifySecureFile(LOG, "bitácora");
             try (FileLock ignored = ch.lock()) {
                 ByteBuffer data = StandardCharsets.UTF_8.encode(line);
                 while (data.hasRemaining()) ch.write(data);
@@ -132,6 +167,8 @@ public class ColaImpresion {
 
         Files.createFile(LOG);
         securePermissions(LOG);
+        verifySecureFile(SHM, "cola compartida");
+        verifySecureFile(LOG, "bitácora");
 
         // Evita reutilizar semáforos abandonados por una ejecución anterior.
         // Ejecutar solo una instancia del servidor a la vez.
@@ -160,9 +197,11 @@ public class ColaImpresion {
         Pointer full = openSemaphore(SEM_FULL);
         boolean reservedSlot = false;
         try {
+            verifySecureFile(SHM, "cola compartida");
             waitSem(empty);
             reservedSlot = true;
             waitSem(mutex);
+            verifySecureFile(SHM, "cola compartida");
             try (RandomAccessFile raf = new RandomAccessFile(SHM.toFile(), "rw");
                  FileChannel ch = raf.getChannel()) {
                 ByteBuffer b = map(ch);
@@ -203,6 +242,7 @@ public class ColaImpresion {
         Pointer empty = openSemaphore(SEM_EMPTY);
         Pointer full = openSemaphore(SEM_FULL);
         try {
+            verifySecureFile(SHM, "cola compartida");
             // No se puede bloquear indefinidamente en "llenos", porque las
             // impresoras deben detectar cuándo ya terminaron todos los trabajos.
             while (true) {
@@ -217,6 +257,7 @@ public class ColaImpresion {
             }
 
             waitSem(mutex);
+            verifySecureFile(SHM, "cola compartida");
             try (RandomAccessFile raf = new RandomAccessFile(SHM.toFile(), "rw");
                  FileChannel ch = raf.getChannel()) {
                 ByteBuffer b = map(ch);
@@ -247,7 +288,9 @@ public class ColaImpresion {
     private static void markCompleted() throws Exception {
         Pointer mutex = openSemaphore(SEM_MUTEX);
         try {
+            verifySecureFile(SHM, "cola compartida");
             waitSem(mutex);
+            verifySecureFile(SHM, "cola compartida");
             try (RandomAccessFile raf = new RandomAccessFile(SHM.toFile(), "rw");
                  FileChannel ch = raf.getChannel()) {
                 ByteBuffer b = map(ch);
@@ -293,6 +336,7 @@ public class ColaImpresion {
     private static void launch(List<Process> processes, String... args) throws IOException {
         List<String> command = new ArrayList<>();
         command.add(Paths.get(System.getProperty("java.home"), "bin", "java").toString());
+        command.add("--enable-native-access=ALL-UNNAMED");
         command.add("-cp");
         command.add(System.getProperty("java.class.path"));
         command.add(ColaImpresion.class.getName());
@@ -327,6 +371,9 @@ public class ColaImpresion {
             System.out.println("Uso: ./run.sh [clientes] [impresoras] [trabajosPorCliente]");
             System.out.println("Ejemplo: ./run.sh 3 2 4");
             return;
+        }
+        if (!args[0].equals("help")) {
+            ensureNotRoot();
         }
         switch (args[0]) {
             case "server" -> {

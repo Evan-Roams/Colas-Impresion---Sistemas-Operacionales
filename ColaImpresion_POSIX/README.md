@@ -1,67 +1,85 @@
-# Cola de impresión compartida con IPC (Kali Linux)
+# Cola de impresión compartida con IPC — Kali Linux
 
-## Arquitectura
-- Java con procesos JVM independientes (`ProcessBuilder`).
-- Cola circular compartida mediante un archivo mapeado en `/dev/shm`.
-- Semáforos POSIX con nombre de Linux, llamados `mutex`, `vacios` y `llenos`, accedidos desde Java con JNA.
-- `FileLock` se usa solo para serializar escrituras de la bitácora.
-- Permisos POSIX `600` para el archivo compartido y la bitácora.
+## 1. Descripción
+Aplicación académica de productor-consumidor que simula una cola de impresión compartida por varios procesos JVM independientes. Un proceso servidor inicializa la cola y crea clientes productores e impresoras consumidoras.
 
-Todo corre en la misma máquina Kali Linux. No se necesita servidor remoto ni conexión de red.
+## 2. Arquitectura y tecnologías
+- Java (JDK 17 o superior).
+- Kali Linux (todos los procesos se ejecutan en la misma máquina).
+- Memoria compartida mediante un archivo mapeado en `/dev/shm/cola_impresion_ipc.dat`.
+- Semáforos POSIX con nombre (`/cipc_mutex`, `/cipc_vacios`, `/cipc_llenos`) invocados desde Java mediante JNA.
+- `ProcessBuilder` para crear procesos JVM independientes.
+- `FileLock` únicamente para serializar las escrituras de la bitácora.
+- Permisos POSIX `0600` para la cola, la bitácora y los semáforos.
 
-## Requisitos
+## 3. Requisitos
 - Kali Linux.
 - JDK 17 o superior.
-- JNA disponible como `/usr/share/java/jna.jar`.
+- JNA, normalmente disponible como `/usr/share/java/jna.jar`.
 
-Instala las dependencias:
+Instalación en Kali:
 ```bash
 sudo apt update
-sudo apt install -y openjdk-17-jdk libjna-java
+sudo apt install -y default-jdk libjna-java
 ```
 
-## Compilar y ejecutar
-Desde la carpeta raíz del proyecto:
+## 4. Ejecución normal
+Ejecute como usuario normal (no root), desde la carpeta raíz:
 ```bash
 chmod +x run.sh
 ./run.sh 3 2 4
 ```
-Esto crea 3 clientes, 2 impresoras y 12 trabajos en total. También se puede ejecutar con otros números:
+Parámetros: número de clientes, número de impresoras y trabajos por cliente. El ejemplo genera 12 trabajos.
+
+La ejecución se rechaza si el usuario efectivo es root. La aplicación verifica que el archivo compartido sea un archivo regular, no un enlace simbólico y tenga exactamente permisos `600` antes de utilizarlo.
+
+## 5. Archivos generados
+- Cola compartida: `/dev/shm/cola_impresion_ipc.dat`
+- Bitácora: `./bitacora_impresion.log`
+
+Comprobar permisos:
 ```bash
-./run.sh 2 2 10
-```
-
-El script compila con JNA y pasa el classpath a los procesos hijos. La cola queda en:
-`/dev/shm/cola_impresion_ipc.dat`
-
-La bitácora queda en:
-`./bitacora_impresion.log`
-
-## Verificar resultados y permisos
-Después de una ejecución:
-```bash
-cat bitacora_impresion.log
 stat -c '%a %A %U %G %n' /dev/shm/cola_impresion_ipc.dat bitacora_impresion.log
 ```
-Los permisos esperados para ambos archivos son `600` (`-rw-------`). La salida de la bitácora debe mostrar los trabajos encolados, iniciados y terminados.
+Ambos deben mostrar `600 -rw-------`.
 
-## Limpieza de semáforos si una ejecución se interrumpe
-El servidor elimina los semáforos con nombre al terminar normalmente. Si el programa se termina abruptamente, revisa `/dev/shm/sem.cipc_*` antes de borrar residuos. Cierra primero cualquier ejecución activa.
-No ejecutes dos instancias del servidor a la vez: ambas usan rutas fijas en `/dev/shm`.
-
-## Limitaciones académicas
-Esta versión requiere Linux/POSIX y la biblioteca JNA. No usa `java.util.concurrent.Semaphore`, porque ese tipo coordina hilos dentro de una JVM y no constituye por sí solo un semáforo compartido entre procesos independientes.
-
-## Variante experimental sin sincronización
-Esta variante se incluye para comparación académica y es intencionalmente insegura.
-No la ejecutes al mismo tiempo que la versión sincronizada porque ambas usan la misma ruta `/dev/shm/cola_impresion_ipc.dat`.
-
+## 6. Prueba automática de seguridad
+Ejecute:
 ```bash
+chmod +x test-security.sh
+./test-security.sh
+```
+La prueba crea un archivo temporal aislado en `/dev/shm` y comprueba que:
+1. Un archivo con permisos `600` sea aceptado.
+2. Un archivo con permisos `664` sea rechazado.
+3. El archivo vuelva a aceptarse al restaurar `600`.
+4. La política de ejecución no-root se evalúe para el usuario actual.
+
+La prueba no modifica la cola real ni la bitácora del proyecto.
+
+## 7. Variante experimental sin sincronización
+Solo para comparación académica; no ejecutar al mismo tiempo que la versión sincronizada porque ambas utilizan la misma ruta de cola.
+```bash
+chmod +x run_sin_sync.sh
 ./run_sin_sync.sh 3 2 4
 ```
+Bitácora: `bitacora_sin_sync.log`. Esta variante omite los semáforos de la cola y contiene pausas artificiales para ampliar las ventanas de carrera. El resultado puede variar entre ejecuciones.
 
-Revisa:
+## 8. Prueba auxiliar de condición de carrera
+La clase `ComparacionCarrera` compara incrementos concurrentes en memoria mapeada con y sin `FileLock`:
 ```bash
-cat bitacora_sin_sync.log
+chmod +x run-carrera.sh
+./run-carrera.sh nosync
+./run-carrera.sh sync
 ```
-El resultado puede variar entre ejecuciones. Una ejecución que por casualidad termine con los contadores esperados no demuestra que el código sea seguro; repite la prueba con más concurrencia, por ejemplo `./run_sin_sync.sh 8 4 20`. Esta variante amplía las ventanas de carrera mediante pausas artificiales para facilitar su observación.
+Esta prueba auxiliar usa `FileLock` para aislar el concepto de exclusión mutua; no sustituye los semáforos POSIX usados por la cola principal.
+
+## 9. Limitaciones y uso seguro
+- Ejecutar una sola instancia del servidor a la vez: se utilizan nombres y rutas fijas en `/dev/shm`.
+- Los permisos `0600` y el rechazo de root son controles locales; no proporcionan cifrado ni integridad criptográfica de la bitácora.
+- La comprobación de permisos se realiza antes de abrir/usar el archivo, pero una modificación externa concurrente entre la comprobación y la apertura (TOCTOU) no queda eliminada completamente.
+- Si el servidor se interrumpe abruptamente, pueden quedar semáforos POSIX con nombre. Antes de limpiar recursos, cierre cualquier instancia activa y revise `/dev/shm/sem.cipc_*`.
+- La variante sin sincronización es intencionalmente insegura y nunca debe usarse para operaciones reales.
+
+## 10. JNA y advertencias de acceso nativo
+El script de ejecución utiliza `--enable-native-access=ALL-UNNAMED` para habilitar el acceso nativo requerido por JNA en versiones modernas de Java.
